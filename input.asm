@@ -1,3 +1,12 @@
+.data
+.byte 10 0x10 0b1001
+.word 0xabcdef
+.dword 0xab
+.dword 0xab
+.asciz "abcdmn."
+.byte 1 2
+
+.text
 add x5, x1, x2         
 sub x6, x3, x4         
 sll x7, x5, x2         
