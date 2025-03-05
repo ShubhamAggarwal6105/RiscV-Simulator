@@ -2,9 +2,13 @@
 using namespace std;
 
 // Convert string to integer
-int ston(const string& input) {
+int to_integer(const string& input) {
     int num = 0;
-    if (input.find("0x") == 0 || input.find("0X") == 0) {
+    if (input.length()==3 && input[0] == '\'' && input[2] == '\''){
+        // Character (ASCII)
+        return input[1];
+    }
+    else if (input.find("0x") == 0 || input.find("0X") == 0) {
         // Hexadecimal (Base 16)
         stringstream ss;
         ss << hex << input.substr(2);
@@ -17,6 +21,49 @@ int ston(const string& input) {
         num = stoi(input);
     }
     return num;
+}
+
+// Get the tokens seperated by space from a line
+vector<string> getTokens(const string &input) {
+    vector<string> tokens;
+    istringstream stream(input);
+    char ch;
+    bool insideQuotes = false;
+    char quoteChar = '\0';  // Stores which quote (' or ")
+    string current;
+
+    while (stream.get(ch)) {
+        if (ch == '#' && !insideQuotes) {
+            break;  // Ignore anything after #
+        }
+
+        if ((ch == '"' || ch == '\'') && (quoteChar == '\0' || quoteChar == ch)) {
+            if (!insideQuotes) {
+                quoteChar = ch;  // Set which quote we are inside
+                insideQuotes = true;
+                current += ch;  // Add opening quote
+            } else {
+                insideQuotes = false;
+                current += ch;  // Add closing quote
+                tokens.push_back(current);
+                current.clear();
+                quoteChar = '\0';  // Reset quote tracking
+            }
+        } else if (insideQuotes) {
+            current += ch;
+        } else if (ch == ' ') {
+            if (!current.empty()) {
+                tokens.push_back(current);
+                current.clear();
+            }
+        } else {
+            current += ch;
+        }
+    }
+
+    if (!current.empty()) tokens.push_back(current);  // Add the last token if needed
+
+    return tokens;
 }
 
 // Structure to hold instruction details
@@ -79,14 +126,22 @@ unordered_map<string, Instruction> instructionSet = {
 
 // Register mapping
 unordered_map<string, string> registerMap = {
-    {"x0", "00000"}, {"x1", "00001"}, {"x2", "00010"}, {"x3", "00011"},
-    {"x4", "00100"}, {"x5", "00101"}, {"x6", "00110"}, {"x7", "00111"},
-    {"x8", "01000"}, {"x9", "01001"}, {"x10", "01010"}, {"x11", "01011"},
-    {"x12", "01100"}, {"x13", "01101"}, {"x14", "01110"}, {"x15", "01111"},
-    {"x16", "10000"}, {"x17", "10001"}, {"x18", "10010"}, {"x19", "10011"},
-    {"x20", "10100"}, {"x21", "10101"}, {"x22", "10110"}, {"x23", "10111"},
-    {"x24", "11000"}, {"x25", "11001"}, {"x26", "11010"}, {"x27", "11011"},
-    {"x28", "11100"}, {"x29", "11101"}, {"x30", "11110"}, {"x31", "11111"}
+    {"ra", "00001"}, {"x1", "00001"}, {"sp", "00010"}, {"x2", "00010"},
+    {"gp", "00011"}, {"x3", "00011"}, {"tp", "00100"}, {"x4", "00100"}, 
+    {"t0", "00101"}, {"x5", "00101"}, {"t1", "00110"}, {"x6", "00110"},
+    {"t2", "00111"}, {"x7", "00111"}, {"s0", "01000"}, {"x8", "01000"}, 
+    {"s1", "01001"}, {"x9", "01001"}, {"a0", "01010"}, {"x10", "01010"}, 
+    {"a1", "01011"}, {"x11", "01011"}, {"a2", "01100"}, {"x12", "01100"}, 
+    {"a3", "01101"}, {"x13", "01101"}, {"a4", "01110"}, {"x14", "01110"}, 
+    {"a5", "01111"}, {"x15", "01111"}, {"a6", "10000"}, {"x16", "10000"}, 
+    {"a7", "10001"}, {"x17", "10001"}, {"s2", "10010"}, {"x18", "10010"}, 
+    {"s3", "10011"}, {"x19", "10011"}, {"s4", "10100"}, {"x20", "10100"}, 
+    {"s5", "10101"}, {"x21", "10101"}, {"s6", "10110"}, {"x22", "10110"}, 
+    {"s7", "10111"}, {"x23", "10111"}, {"s8", "11000"}, {"x24", "11000"}, 
+    {"s9", "11001"}, {"x25", "11001"}, {"s10", "11010"}, {"x26", "11010"}, 
+    {"s11", "11011"}, {"x27", "11011"}, {"t3", "11100"}, {"x28", "11100"}, 
+    {"t4", "11101"}, {"x29", "11101"}, {"t5", "11110"}, {"x30", "11110"}, 
+    {"t6", "11111"}, {"x31", "11111"}, {"x0", "00000"}
 };
 
 // Directive Space Mapping
@@ -94,16 +149,18 @@ unordered_map<string, int> datatypeSpace = {
     {".byte", 1}, {".half", 2}, {".word", 4}, {".dword", 8}, {".asciz", 1}
 };
 
-// Function to process an instruction and return its machine code, rd, rs1, rs2, imm
-vector<string> assembleInstruction(const vector<string>& tokens, int programCounter) {
+// Function to process an instruction and return its machine code and instruction details
+pair<string, string> assembleInstruction(const vector<string>& tokens, int programCounter) {
     if (tokens.empty()) return {"", ""};
     
+    // Instruction not found
     string mnemonic = tokens[0];
     if (instructionSet.find(mnemonic) == instructionSet.end()) {
         cerr << "Error: Unknown instruction " << mnemonic << endl;
         return {"", ""};
     }
     
+    // Instruction details
     Instruction instr = instructionSet[mnemonic];
     string rd = "NULL";
     string rs1 = "NULL";
@@ -116,47 +173,54 @@ vector<string> assembleInstruction(const vector<string>& tokens, int programCoun
         rs1 = registerMap[tokens[2]];
         rs2 = registerMap[tokens[3]];
         machineCode = instr.funct7 + rs2 + rs1 + instr.funct3 + rd + instr.opcode;
-    } else if (instr.type == "I") {
+    } 
+    else if (instr.type == "I") {
         if (instr.opcode == "0010011"){
             rd = registerMap[tokens[1]];
             rs1 = registerMap[tokens[2]];
-            // srai, slli, srli
+            // logical immediates - srli, srai, slli
             if (instr.funct7 != "NULL"){
-                imm = instr.funct7 + bitset<5>(ston(tokens[3])).to_string();
+                imm = instr.funct7 + bitset<5>(to_integer(tokens[3])).to_string();
             }
             else{
-                imm = bitset<12>(ston(tokens[3])).to_string();
+                imm = bitset<12>(to_integer(tokens[3])).to_string();
             }
         }
+        // load immediates
         else if (instr.opcode == "0000011"){
             rd = registerMap[tokens[1]];
             rs1 = registerMap[tokens[3]];
-            imm = bitset<12>(ston(tokens[2])).to_string();
+            imm = bitset<12>(to_integer(tokens[2])).to_string();
         }
+        // jalr
         else if (instr.opcode == "1100111"){
             rd = registerMap[tokens[1]];
             rs1 = registerMap[tokens[2]];
-            imm = bitset<12>(ston(tokens[3])).to_string();
+            imm = bitset<12>(to_integer(tokens[3])).to_string();
         }
         machineCode = imm + rs1 + instr.funct3 + rd + instr.opcode;
-    } else if (instr.type == "S") {
+    } 
+    else if (instr.type == "S") {
         rs1 = registerMap[tokens[3]];
         rs2 = registerMap[tokens[1]];
-        imm = bitset<12>(ston(tokens[2])).to_string();
+        imm = bitset<12>(to_integer(tokens[2])).to_string();
         machineCode = imm.substr(0, 7) + rs2 + rs1 + instr.funct3 + imm.substr(7, 5) + instr.opcode;
-    } else if (instr.type == "SB") {
+    } 
+    else if (instr.type == "SB") {
         rs1 = registerMap[tokens[1]];
         rs2 = registerMap[tokens[2]];
-        int offset = ston(tokens[3]) - programCounter;
+        int offset = to_integer(tokens[3]) - programCounter;
         imm = bitset<12>(offset>>1).to_string();
         machineCode = imm[0] + imm.substr(2, 6) + rs2 + rs1 + instr.funct3 + imm.substr(8, 4) + imm[1] + instr.opcode;
-    } else if (instr.type == "U") {
+    } 
+    else if (instr.type == "U") {
         rd = registerMap[tokens[1]];
-        imm = bitset<20>(ston(tokens[2])).to_string();
+        imm = bitset<20>(to_integer(tokens[2])).to_string();
         machineCode = imm + rd + instr.opcode;
-    } else if (instr.type == "UJ") {
+    } 
+    else if (instr.type == "UJ") {
         rd = registerMap[tokens[1]];
-        int offset = ston(tokens[2]) - programCounter;
+        int offset = to_integer(tokens[2]) - programCounter;
         imm = bitset<20>(offset>>1).to_string();
         machineCode = imm[0] + imm.substr(10, 10) + imm[9] + imm.substr(1, 8) + rd + instr.opcode;
     }
@@ -164,12 +228,11 @@ vector<string> assembleInstruction(const vector<string>& tokens, int programCoun
     return {machineCode, instr.opcode+"-"+instr.funct3+"-"+instr.funct7+"-"+rd+"-"+rs1+"-"+rs2+"-"+imm};
 }
 
-// Function to parse the .asm file
-void parseAssembly(const string& inputFile, const string& outputFile) {
+vector<string> readInputFile(const string& inputFile){
     ifstream inFile(inputFile);
     if (!inFile.is_open()) {
         cerr << "Error opening input file " << inputFile << endl;
-        return;
+        return {""};
     }
     vector<string> lines;
     {
@@ -179,8 +242,11 @@ void parseAssembly(const string& inputFile, const string& outputFile) {
         }
     }
     inFile.close();
+    return lines;  
+}
 
-    // first parse to get the address of each line and setting up labels.
+// parse Assembly Pass 1
+pair<vector<vector<string>>, vector<vector<string>>> buildSymbolTable(vector<string>& lines){
     string currSegment = "text"; // Initially in text segment
     vector<vector<string>> textTokensList;
     vector<vector<string>> dataTokensList;
@@ -189,15 +255,10 @@ void parseAssembly(const string& inputFile, const string& outputFile) {
     for (auto &line : lines) {
         // Removing commas and bracket
         line = regex_replace(line, regex("[,()]"), " ");
-        line = regex_replace(line, regex(":"), ": ");
+        line = regex_replace(line, regex(":"), " : ");
 
         // Tokenize
-        istringstream iss(line);
-        vector<string> tokens;
-        string token;
-        while (iss >> token) {
-            tokens.push_back(token);
-        }
+        vector<string> tokens = getTokens(line);
         if (tokens.empty()) {
             continue; // blank line
         }
@@ -211,8 +272,9 @@ void parseAssembly(const string& inputFile, const string& outputFile) {
             continue;
         }
         
-        if (tokens[0].back() == ':') {
-            string label = tokens[0].substr(0, tokens[0].size() - 1);
+        if (tokens.size() > 1 && tokens[1] == ":") {
+            string label = tokens[0];
+            tokens.erase(tokens.begin());
             tokens.erase(tokens.begin());
             if (currSegment == "text"){
                 labelTable[label] = textAddress;
@@ -239,13 +301,10 @@ void parseAssembly(const string& inputFile, const string& outputFile) {
             }
         }
     }
+    return {textTokensList, dataTokensList};
+}
 
-    ofstream outFile(outputFile);
-    if (!outFile.is_open()) {
-        cerr << "Error opening output file " << outputFile << endl;
-        return;
-    }
-
+void parseTextTokens(vector<vector<string>>& textTokensList, ofstream& outFile){
     // parse for textTokensList
     int currAddress = 0;
     for (auto &tokens: textTokensList) {
@@ -256,36 +315,40 @@ void parseAssembly(const string& inputFile, const string& outputFile) {
             }
         }
 
-        // Now if tokens[0] is a valid mnemonic, let's assemble
-        if (instructionSet.find(tokens[0]) != instructionSet.end()) {
-            vector<string> instructionParts = assembleInstruction(tokens, currAddress);
-            string machineCode = instructionParts[0];
-            string instructionDetails = instructionParts[1];
-            if (!machineCode.empty()) {
-                unsigned long codeVal = stoul(machineCode, nullptr, 2);
-                // Output format: 0xADDRESS 0xCODE , original line
-                string originalInstruction = accumulate(tokens.begin(), tokens.end(), string(),
-                    [](const string& a, const string& b) {
-                    return a.empty() ? b : a + " " + b;
-                });
+        pair<string, string> instructionParts = assembleInstruction(tokens, currAddress);
+        string machineCode = instructionParts.first;
+        string instructionDetails = instructionParts.second;
+        string originalInstruction = accumulate(tokens.begin(), tokens.end(), string(),
+            [](const string& a, const string& b) {
+            return a.empty() ? b : a + " " + b;
+        });
+        if (!machineCode.empty()) {
+            unsigned long codeVal = stoul(machineCode, nullptr, 2);
+            // Output format: 0xADDRESS 0xCODE , original line, instruction details
 
-                outFile << "0x" << hex << uppercase << currAddress
-                        << " 0x" << setw(8) << setfill('0') << codeVal
-                        << " , " << originalInstruction << " # "
-                        << instructionDetails << "\n";
-            }
-            currAddress += 4;
+            outFile << "0x" << hex << uppercase << currAddress
+                    << " 0x" << setw(8) << setfill('0') << codeVal
+                    << " , " << originalInstruction << " # "
+                    << instructionDetails << "\n";
         }
+        else{
+            outFile << "0x" << hex << uppercase << currAddress
+                    << " ERROR"
+                    << " , " << originalInstruction << " # "
+                    << instructionDetails << "\n";
+        }
+        currAddress += 4;
     }
     // Displaying end of program code - 0x00000000
     outFile << "0x" << hex << uppercase << currAddress
             << " 0x" << setw(8) << setfill('0') << 0
             << " , " << "EOF" << "\n";
-            
+}
 
+void parseDataTokens(vector<vector<string>>& dataTokensList, ofstream& outFile){
     // parse for dataTokensList
     string directive;
-    currAddress = 0x10000000;
+    int currAddress = 0x10000000;
     for (auto &tokens: dataTokensList) {
         // Replace labels
         for (auto &token: tokens){
@@ -299,23 +362,21 @@ void parseAssembly(const string& inputFile, const string& outputFile) {
         
         if (directive == ".byte") {
             for (auto &data: tokens) {
-                int byteValue = ston(data);
+                int byteValue = to_integer(data);
                 stringstream hexValue;
                 hexValue << "0x" << hex << uppercase << setw(2) << setfill('0') << byteValue;
                 outFile << "0x" << hex << uppercase << currAddress << " " << hexValue.str() << "\n";
-                // memory.push_back({currAddress, hexValue.str()});
                 currAddress++;
             }
         }
         else if (directive == ".half") {
             for (auto &data: tokens) {
-                int halfValue = ston(data);
+                int halfValue = to_integer(data);
                 for(int i=0; i<2; i++){
                     int byteValue = halfValue & 255;
                     stringstream hexValue;
                     hexValue << "0x" << hex << uppercase << setw(2) << setfill('0') << byteValue;
                     outFile << "0x" << hex << uppercase << currAddress << " " << hexValue.str() << "\n";
-                    // memory.push_back({currAddress, hexValue.str()});
                     currAddress++;
                     halfValue >>= 8;
                 }
@@ -323,13 +384,12 @@ void parseAssembly(const string& inputFile, const string& outputFile) {
         }
         else if (directive == ".word") {
             for (auto &data: tokens) {
-                int wordValue = ston(data);
+                int wordValue = to_integer(data);
                 for(int i=0; i<4; i++){
                     int byteValue = wordValue & 255;
                     stringstream hexValue;
                     hexValue << "0x" << hex << uppercase << setw(2) << setfill('0') << byteValue;
                     outFile << "0x" << hex << uppercase << currAddress << " " << hexValue.str() << "\n";
-                    // memory.push_back({currAddress, hexValue.str()});
                     currAddress++;
                     wordValue >>= 8;
                 }
@@ -337,13 +397,12 @@ void parseAssembly(const string& inputFile, const string& outputFile) {
         }
         else if (directive == ".dword") {
             for (auto &data: tokens) {
-                long long dwordValue = ston(data);
+                long long dwordValue = to_integer(data);
                 for(int i=0; i<8; i++){
                     int byteValue = dwordValue & 255;
                     stringstream hexValue;
                     hexValue << "0x" << hex << uppercase << setw(2) << setfill('0') << byteValue;
                     outFile << "0x" << hex << uppercase << currAddress << " " << hexValue.str() << "\n";
-                    // memory.push_back({currAddress, hexValue.str()});
                     currAddress++;
                     dwordValue >>= 8;
                 }
@@ -365,17 +424,34 @@ void parseAssembly(const string& inputFile, const string& outputFile) {
                 stringstream hexValue;
                 hexValue << "0x" << hex << uppercase << setw(2) << setfill('0') << (int)c;
                 outFile << "0x" << hex << uppercase << currAddress << " " << hexValue.str() << "\n";
-                // memory.push_back({currAddress, hexValue.str()});
                 currAddress++;
             }
             outFile << "0x" << hex << uppercase << currAddress << " " << "0x00" << "\n";
-            // memory.push_back({currAddress, "0x00"});  // Null terminator
             currAddress++;
         }
         else {
             cerr << "Unknown directive: " << directive << endl;
         }
     }
+}
+
+// Function to parse the .asm file
+void parseAssembly(const string& inputFile, const string& outputFile) {
+    vector<string> lines = readInputFile(inputFile);
+
+    // get data tokens, text tokens, and build label table.
+    pair<vector<vector<string>>, vector<vector<string>>> tokensList = buildSymbolTable(lines);
+    vector<vector<string>> textTokensList = tokensList.first;
+    vector<vector<string>> dataTokensList = tokensList.second;
+
+    ofstream outFile(outputFile);
+    if (!outFile.is_open()) {
+        cerr << "Error opening output file " << outputFile << endl;
+        return;
+    }
+
+    parseTextTokens(textTokensList, outFile);
+    parseDataTokens(dataTokensList, outFile);
 
     outFile.close();
 }
