@@ -110,6 +110,6 @@ g++ -o main main.cpp
 
 - **Shubham Aggarwal (2023CSB1162)**: Project setup, input-output handling, Pass 2 (machine code to assembly).  
 - **Navneet Kaur (2023CSB1137)**: Implemented data segment handling, and handling of assembly directives. (.data, .byte, etc.)
-- **Yatri Sutariya (2023CSB1319)**: Pass 1 (label resolution, symbol table creation) and bug fixes in Pass 2.
+- **Yatri Sutariya (2023CSB1319)**: Pass 1 (label resolution, symbol table creation) and bug fixes.
 
 ---
