@@ -15,7 +15,6 @@ This project implements a **32-bit RISC-V assembler** and a **hardware simulator
 - [Implementation Details](#implementation-details)
 - [Contributions](#contributions)
 - [Screenshots](#screenshots)
-- [License](#license)
 
 ---
 
@@ -201,6 +200,8 @@ The GUI provides an intuitive way to interact with the simulator. It displays th
 
 ---
 
-## License
+## Screenshots
+
+TO BE ADDED
 
 This project is provided for educational purposes. Please refer to the LICENSE file for details on usage rights and restrictions.
