@@ -1,0 +1,18 @@
+
+---------- Fetch Stage ----------
+PC = 0x00000064 | Fetched Instruction = 0x00000000
+
+---------- Decode Stage ----------
+Opcode = 0x00000000 | rd = x0 | rs1 = x0 | rs2 = x0 | funct3 = 0x00000000 | funct7 = 0x00000000
+Instruction: EXIT
+Unknown Instruction
+Control Signals: RegWrite=false, ALUSrc=false, MemRead=false, MemWrite=false, MemToReg=false, Branch=false, Jump=false, Halt=true
+
+---------- Execute Stage ----------
+No operation executed.
+
+---------- Memory Access Stage ----------
+No memory access performed.
+
+---------- Write Back Stage ----------
+No register write-back performed.
