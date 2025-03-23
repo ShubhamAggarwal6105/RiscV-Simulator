@@ -203,5 +203,3 @@ The GUI provides an intuitive way to interact with the simulator. It displays th
 ## Screenshots
 
 TO BE ADDED
-
-This project is provided for educational purposes. Please refer to the LICENSE file for details on usage rights and restrictions.
