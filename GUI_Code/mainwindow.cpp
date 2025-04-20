@@ -1,15 +1,22 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "highlighter.h"
-#include "assembler.h"  // Include the assembler header
+#include "assembler.h"
 #include "simulator.h"
+#include "optiondialog.h"
+#include "pipeline_simulator.h"
+#include "knobs.h"
 
 #include <QFile>
 #include <QTextStream>
 #include <QMessageBox>
 
+KnobManager knobs;
+bool pipelineEnabled = false;
 int numRows;
 int cursorMemory = 0;
+
+vector<int> instructionStage = {-1, -1, -1, -1, -1};
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -50,7 +57,7 @@ MainWindow::MainWindow(QWidget *parent)
         "   border-bottom: 1px solid white;"         // white lines between rows
         "}"
         "QHeaderView::section {"
-        "   background-color: #f0f0f0;"               // a light header background color
+        "   Foreground-color: #f0f0f0;"               // a light header Foreground color
         "   padding: 5px;"
         "   border: 1px solid white;"                // white borders in header
         "}"
@@ -132,6 +139,16 @@ MainWindow::~MainWindow()
 
 void MainWindow::on_btnSimulator_clicked()
 {
+    // Choose knobs
+    QList<bool> knobList;
+
+    OptionDialog dialog(this);
+    if (dialog.exec() == QDialog::Accepted) {
+        knobList = dialog.getOptions();
+    } else {
+        return; // User canceled
+    }
+
     // Write the assembly code from the text editor to input.asm
     QString asmContent = ui->txtEditor->toPlainText();
     QFile asmFile("input.asm");
@@ -147,6 +164,14 @@ void MainWindow::on_btnSimulator_clicked()
     // parseAssembly is defined in your assembler module (assembler.cpp) and declared in assembler.h.
     parseAssembly("input.asm", "output.mc");
 
+    // Update knobs
+    knobs.pipelining = knobList[0];
+    knobs.dataForwarding = knobList[1];
+    knobs.traceBranchUnit = knobList[2];
+
+    // If pipeline NOT enabled, use PHASE 2
+    pipelineEnabled = knobList[0];
+    if (!pipelineEnabled){
     // Read the generated output.mc file to display the machine code
     QFile outFile("output.mc");
     if (!outFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -182,6 +207,29 @@ void MainWindow::on_btnSimulator_clicked()
         row << item1 << item2 << item3;
         rows.append(row);
     }
+
+    ui->tableMC->setColumnCount(3);
+
+    QStringList headers;
+    headers << "PC" << "Machine Code" << "Assembly Code";
+    ui->tableMC->setHorizontalHeaderLabels(headers);
+
+    ui->tableMC->setStyleSheet(
+        "QTableWidget::item {"
+        "  border: 0px;"
+        "  border-bottom: 1px solid grey;"
+        "}"
+        "QHeaderView::section {"
+        "  border: 0px;"
+        "  border-bottom: 1px solid white;"
+        "  font-weight: bold;"
+        "  font-size: 12pt;"
+        "}"
+    );
+
+    ui->tableMC->setColumnWidth(0, 220);
+    ui->tableMC->setColumnWidth(1, 220);
+    ui->tableMC->setColumnWidth(2, 220);
 
     numRows = rows.size();
     ui->tableMC->setRowCount(numRows);
@@ -242,6 +290,128 @@ void MainWindow::on_btnSimulator_clicked()
     MainWindow::updateMCDisplay();
     MainWindow::updateCMDStates();
     MainWindow::updateConsoleDisplay();
+
+    }
+
+    // PIPELINE, PHASE 3
+    else{
+        // Read the generated output.mc file to display the machine code
+        QFile outFile("output.mc");
+        if (!outFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QMessageBox::warning(this, "File Error", "Could not open output.mc");
+            return;
+        }
+        QTextStream outStream(&outFile);
+        QString machineCode = outStream.readAll();
+        outFile.close();
+
+        // // Update the tableMC to show the machine code
+        QStringList lines = machineCode.split('\n');
+        QStringList rows;
+        for(int i=0; i<lines.size(); i++){
+            QString line = lines[i];
+            int commaIndex = line.indexOf(',');
+            QString rightPart = line.mid(commaIndex+1).trimmed();
+            if (rightPart == QString("EOF")){
+                break;
+            }
+            QStringList rightTokens = rightPart.split('#');
+            QString item3 = rightTokens[0].trimmed();
+            rows.append(item3);
+        }
+
+        ui->tableMC->setColumnCount(6);
+
+        QStringList headers;
+        headers << "INST" << "F" << "D" << "EX" << "MB" << "WB";
+        ui->tableMC->setHorizontalHeaderLabels(headers);
+
+        ui->tableMC->setStyleSheet(
+            "QTableWidget::item {"
+            "  border: 0px;"
+            "  border-bottom: 1px solid grey;"
+            "}"
+            "QHeaderView::section {"
+            "  border: 0px;"
+            "  border-bottom: 1px solid white;"
+            "  font-weight: bold;"
+            "  font-size: 12pt;"
+            "}"
+        );
+
+        ui->tableMC->setColumnWidth(0, 260);
+        ui->tableMC->setColumnWidth(1, 80);
+        ui->tableMC->setColumnWidth(2, 80);
+        ui->tableMC->setColumnWidth(3, 80);
+        ui->tableMC->setColumnWidth(4, 80);
+        ui->tableMC->setColumnWidth(5, 80);
+
+        numRows = rows.size();
+        ui->tableMC->setRowCount(numRows);
+        for(int i=0; i<numRows; i++){
+            QTableWidgetItem *item = new QTableWidgetItem(rows[i]);
+
+            QTableWidgetItem *item1 = new QTableWidgetItem("✔");
+            QTableWidgetItem *item2 = new QTableWidgetItem("✔");
+            QTableWidgetItem *item3 = new QTableWidgetItem("✔");
+            QTableWidgetItem *item4 = new QTableWidgetItem("✔");
+            QTableWidgetItem *item5 = new QTableWidgetItem("✔");
+
+            item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+            item1->setFlags(item1->flags() & ~Qt::ItemIsEditable);
+            item2->setFlags(item2->flags() & ~Qt::ItemIsEditable);
+            item3->setFlags(item3->flags() & ~Qt::ItemIsEditable);
+            item4->setFlags(item4->flags() & ~Qt::ItemIsEditable);
+            item5->setFlags(item5->flags() & ~Qt::ItemIsEditable);
+
+            item1->setForeground((i*4==instructionStage[0]?QColor(255, 143, 64):QColor(0, 0, 0)));
+            item2->setForeground((i*4==instructionStage[1]?QColor(255, 143, 64):QColor(0, 0, 0)));
+            item3->setForeground((i*4==instructionStage[2]?QColor(255, 143, 64):QColor(0, 0, 0)));
+            item4->setForeground((i*4==instructionStage[3]?QColor(255, 143, 64):QColor(0, 0, 0)));
+            item5->setForeground((i*4==instructionStage[4]?QColor(255, 143, 64):QColor(0, 0, 0)));
+
+            ui->tableMC->setItem(i, 0, item);
+            ui->tableMC->setItem(i, 1, item1);
+            ui->tableMC->setItem(i, 2, item2);
+            ui->tableMC->setItem(i, 3, item3);
+            ui->tableMC->setItem(i, 4, item4);
+            ui->tableMC->setItem(i, 5, item5);
+        }
+
+        // Hide the text editor and update button states
+        ui->runButton->show();
+        ui->prevButton->show();
+        ui->stepButton->show();
+        ui->resetButton->show();
+
+        ui->txtEditor->hide();
+        ui->tableMC->show();
+        ui->btnEditor->setEnabled(true);
+        ui->btnSimulator->setEnabled(false);
+
+        // Load Program Memory
+        cursorMemory = 0;
+        ui->txtMemAddress->clear();
+        pipeline::load_program_memory("output.mc");
+        pipeline::resetPipelinedSimulator();
+        instructionStage = {-1, -1, -1, -1, -1};
+
+        // Register/Memory Display
+        ui->btnRegistor->show();
+        ui->btnMemory->show();
+        ui->tableRegister->show();
+        ui->tableMemory->hide();
+        ui->txtConsole->show();
+
+        MainWindow::updateRegisterDisplay();
+        MainWindow::updateMemoryDisplay();
+
+        ui->btnMemory->setEnabled(true);
+        ui->btnRegistor->setEnabled(false);
+        MainWindow::updateMCDisplay();
+        MainWindow::updateCMDStates();
+        MainWindow::updateConsoleDisplay();
+    }
 }
 
 void MainWindow::on_btnEditor_clicked()
@@ -294,44 +464,63 @@ void MainWindow::on_txtEditor_textChanged()
 
 // Updates the button states: Run, Step, Next, Reset
 void MainWindow::updateCMDStates(){
-    if (PC == 0 && PC == (numRows-1)*4){
-        ui->runButton->setEnabled(false);
-        ui->stepButton->setEnabled(false);
-        ui->prevButton->setEnabled(false);
-        ui->resetButton->setEnabled(false);
-    }
-    else if (PC == 0){
-        ui->runButton->setEnabled(true);
-        ui->stepButton->setEnabled(true);
-        ui->prevButton->setEnabled(false);
-        ui->resetButton->setEnabled(false);
-    }
-    else if (PC == (numRows-1)*4){
-        ui->runButton->setEnabled(false);
-        ui->stepButton->setEnabled(false);
-        ui->prevButton->setEnabled(true);
-        ui->resetButton->setEnabled(true);
+    if (!pipelineEnabled){
+        if (PC == 0 && PC == (numRows-1)*4){
+            ui->runButton->setEnabled(false);
+            ui->stepButton->setEnabled(false);
+            ui->prevButton->setEnabled(false);
+            ui->resetButton->setEnabled(false);
+        }
+        else if (PC == 0){
+            ui->runButton->setEnabled(true);
+            ui->stepButton->setEnabled(true);
+            ui->prevButton->setEnabled(false);
+            ui->resetButton->setEnabled(false);
+        }
+        else if (PC == (numRows-1)*4){
+            ui->runButton->setEnabled(false);
+            ui->stepButton->setEnabled(false);
+            ui->prevButton->setEnabled(true);
+            ui->resetButton->setEnabled(true);
+        }
+        else{
+            ui->runButton->setEnabled(true);
+            ui->stepButton->setEnabled(true);
+            ui->prevButton->setEnabled(true);
+            ui->resetButton->setEnabled(true);
+        }
     }
     else{
         ui->runButton->setEnabled(true);
         ui->stepButton->setEnabled(true);
-        ui->prevButton->setEnabled(true);
+        ui->prevButton->setEnabled(false);
         ui->resetButton->setEnabled(true);
     }
 }
 
 // Updates the current machine code line highlighter
 void MainWindow::updateMCDisplay(){
-    for(int i=0; i<numRows; i++){
-        if (i * 4 == PC) {
-            ui->tableMC->item(i,0)->setForeground(QColor(255, 143, 64));
-            ui->tableMC->item(i,1)->setForeground(QColor(255, 143, 64));
-            ui->tableMC->item(i,2)->setForeground(QColor(255, 143, 64));
+    if (!pipelineEnabled){
+        for(int i=0; i<numRows; i++){
+            if (i * 4 == PC) {
+                ui->tableMC->item(i,0)->setForeground(QColor(255, 143, 64));
+                ui->tableMC->item(i,1)->setForeground(QColor(255, 143, 64));
+                ui->tableMC->item(i,2)->setForeground(QColor(255, 143, 64));
+            }
+            else{
+                ui->tableMC->item(i,0)->setForeground(QColor(255, 255, 255));
+                ui->tableMC->item(i,1)->setForeground(QColor(255, 255, 255));
+                ui->tableMC->item(i,2)->setForeground(QColor(255, 255, 255));
+            }
         }
-        else{
-            ui->tableMC->item(i,0)->setForeground(QColor(255, 255, 255));
-            ui->tableMC->item(i,1)->setForeground(QColor(255, 255, 255));
-            ui->tableMC->item(i,2)->setForeground(QColor(255, 255, 255));
+    }
+    else{
+        for(int i=0; i<numRows; i++){
+            ui->tableMC->item(i,1)->setForeground((i*4==instructionStage[0]?QColor(255, 143, 64):QColor(0, 0, 0)));
+            ui->tableMC->item(i,2)->setForeground((i*4==instructionStage[1]?QColor(255, 143, 64):QColor(0, 0, 0)));
+            ui->tableMC->item(i,3)->setForeground((i*4==instructionStage[2]?QColor(255, 143, 64):QColor(0, 0, 0)));
+            ui->tableMC->item(i,4)->setForeground((i*4==instructionStage[3]?QColor(255, 143, 64):QColor(0, 0, 0)));
+            ui->tableMC->item(i,5)->setForeground((i*4==instructionStage[4]?QColor(255, 143, 64):QColor(0, 0, 0)));
         }
     }
 }
@@ -348,6 +537,19 @@ void MainWindow::updateConsoleDisplay(){
     QString cycle_log = logStream.readAll();
     logFile.close();
 
+    if (pipelineEnabled){
+        QFile logFile("stats.txt");
+        if (!logFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QMessageBox::warning(this, "File Error", "Could not open stats.txt");
+            return;
+        }
+        QTextStream logStream(&logFile);
+        QString stats = logStream.readAll();
+        logFile.close();
+
+        cycle_log += stats;
+    }
+
     ui->txtConsole->setPlainText(cycle_log);
 }
 
@@ -356,7 +558,7 @@ void MainWindow::updateRegisterDisplay()
 {
     for (int i = 0; i < 32; i++) {
         ui->tableRegister->item(i, 1)->setText(QString("0x%1")
-                                                    .arg(R[i], 8, 16, QChar('0')).toUpper());
+                                                    .arg((pipelineEnabled?pipeline::R[i]:R[i]), 8, 16, QChar('0')).toUpper());
     }
 }
 
@@ -365,16 +567,88 @@ void MainWindow::updateMemoryDisplay()
     for(int i=0; i<14; i++){
         int currAddress = (cursorMemory+13-i)*4;
         ui->tableMemory->item(i, 0)->setText(QString("0x%1").arg(currAddress, 8, 16, QChar('0')).toUpper());
-        ui->tableMemory->item(i, 1)->setText(QString("%1").arg(MEM[currAddress+3], 2, 16, QChar('0')).toUpper());
-        ui->tableMemory->item(i, 2)->setText(QString("%1").arg(MEM[currAddress+2], 2, 16, QChar('0')).toUpper());
-        ui->tableMemory->item(i, 3)->setText(QString("%1").arg(MEM[currAddress+1], 2, 16, QChar('0')).toUpper());
-        ui->tableMemory->item(i, 4)->setText(QString("%1").arg(MEM[currAddress], 2, 16, QChar('0')).toUpper());
+        ui->tableMemory->item(i, 1)->setText(QString("%1").arg((pipelineEnabled?pipeline::MEM[currAddress+3]:MEM[currAddress+3]), 2, 16, QChar('0')).toUpper());
+        ui->tableMemory->item(i, 2)->setText(QString("%1").arg((pipelineEnabled?pipeline::MEM[currAddress+2]:MEM[currAddress+2]), 2, 16, QChar('0')).toUpper());
+        ui->tableMemory->item(i, 3)->setText(QString("%1").arg((pipelineEnabled?pipeline::MEM[currAddress+1]:MEM[currAddress+1]), 2, 16, QChar('0')).toUpper());
+        ui->tableMemory->item(i, 4)->setText(QString("%1").arg((pipelineEnabled?pipeline::MEM[currAddress]:MEM[currAddress]), 2, 16, QChar('0')).toUpper());
     }
 }
 
 void MainWindow::on_runButton_clicked()
 {
-    runRiscvSim();
+    if (!pipelineEnabled){
+        runRiscvSim();
+    }
+    else{
+        auto details = pipeline::runPipelinedSimulator(knobs);
+
+        instructionStage = details.first;
+        map<uint32_t, vector<pair<bool, bool>>> PHT_table = details.second;
+
+        int total = 0, correct = 0;
+
+        // Count total entries for table rows
+        int rowCount = 0;
+        for (const auto& entry : PHT_table)
+            rowCount += entry.second.size();
+
+        // GUI Setup
+        QDialog window;
+        window.setWindowTitle("PHT Table Visualization");
+        QVBoxLayout *layout = new QVBoxLayout(&window);
+
+        // Create table widget
+        QTableWidget *table = new QTableWidget(rowCount, 3);
+        table->setHorizontalHeaderLabels({"PC", "Predicted", "Actual"});
+
+        // Fill table
+        int row = 0;
+        for (const auto& [pc, vec] : PHT_table) {
+            for (const auto& [pred, act] : vec) {
+                QString pc_str = QString("0x%1").arg(pc, 0, 16);
+                QString pred_str = pred ? "true" : "false";
+                QString act_str = act ? "true" : "false";
+
+                table->setItem(row, 0, new QTableWidgetItem(pc_str));
+                table->setItem(row, 1, new QTableWidgetItem(pred_str));
+                table->setItem(row, 2, new QTableWidgetItem(act_str));
+
+                bool matched = (pred == act);
+                if (matched) correct++;
+                total++;
+
+                // Set background color
+                QColor color = matched ? QColor(144, 238, 144) : QColor(255, 99, 71); // green or red
+                for (int col = 0; col < 3; col++) {
+                    table->item(row, col)->setBackground(color);
+                    table->item(row, col)->setForeground(QBrush(QColor(0, 0, 0))); // Set text color to black
+                }
+
+                row++;
+            }
+        }
+
+        // Accuracy label
+        double accuracy = total ? (double)correct / total * 100.0 : 0.0;
+        QString acc_str = QString("Accuracy: %1%").arg(QString::number(accuracy, 'f', 2));
+        QLabel *accLabel = new QLabel(acc_str);
+        accLabel->setStyleSheet(
+            "QLabel { "
+            "background-color: #FFD700; "    // richer yellow (golden)
+            "padding: 6px; "
+            "font-weight: bold; "
+            "font-size: 14px; "
+            "border: 1px solid black; "
+            "border-radius: 6px; "
+            "color: black; "                 // Set text color to black for visibility
+            "}"
+            );
+        layout->addWidget(table);
+        layout->addWidget(accLabel);
+        window.setLayout(layout);
+        window.resize(400, 300);
+        window.exec();
+    }
     MainWindow::updateRegisterDisplay();
     MainWindow::updateMemoryDisplay();
     MainWindow::updateMCDisplay();
@@ -384,7 +658,12 @@ void MainWindow::on_runButton_clicked()
 
 void MainWindow::on_stepButton_clicked()
 {
-    stepRiscvSim();
+    if (!pipelineEnabled){
+        stepRiscvSim();
+    }
+    else{
+        instructionStage = pipeline::stepPipelinedSimulator(knobs);
+    }
     MainWindow::updateRegisterDisplay();
     MainWindow::updateMemoryDisplay();
     MainWindow::updateMCDisplay();
@@ -404,7 +683,13 @@ void MainWindow::on_prevButton_clicked()
 
 void MainWindow::on_resetButton_clicked()
 {
-    resetRiscvSim();
+    if (!pipelineEnabled){
+        resetRiscvSim();
+    }
+    else{
+        instructionStage = {-1, -1, -1, -1, -1};
+        pipeline::resetPipelinedSimulator();
+    }
     MainWindow::updateRegisterDisplay();
     MainWindow::updateMemoryDisplay();
     MainWindow::updateMCDisplay();

@@ -13,12 +13,20 @@ SOURCES += \
     highlighter.cpp \
     main.cpp \
     mainwindow.cpp \
+    optiondialog.cpp \
+    pipeline_simulator.cpp \
     simulator.cpp
 
 HEADERS += \
     assembler.h \
+    branchprediction.h \
+    control_unit.h \
     highlighter.h \
+    knobs.h \
     mainwindow.h \
+    optiondialog.h \
+    pipeline_registers.h \
+    pipeline_simulator.h \
     simulator.h
 
 FORMS += \

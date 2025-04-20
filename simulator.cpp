@@ -4,35 +4,34 @@
 #include <sstream>
 using namespace std;
 
-// ------------------------
-// TeeBuf: Write to both console and a secondary stream (used locally)
-// ------------------------
-class TeeBuf : public streambuf {
-    streambuf* sb1;
-    streambuf* sb2;
-public:
-    TeeBuf(streambuf* buf1, streambuf* buf2) : sb1(buf1), sb2(buf2) { }
-protected:
-    int overflow(int c) override {
-        if(c == EOF)
-            return !EOF;
-        else {
-            int r1 = sb1->sputc(c);
-            int r2 = sb2->sputc(c);
-            return (r1 == EOF || r2 == EOF) ? EOF : c;
+class DualStreamBuf : public std::streambuf {
+    public:
+        DualStreamBuf(std::streambuf* buf1, std::streambuf* buf2)
+            : buffer1(buf1), buffer2(buf2) {}
+    
+    protected:
+        virtual int overflow(int c) override {
+            if (c == EOF) return !EOF;
+            if (buffer1) buffer1->sputc(c);
+            if (buffer2) buffer2->sputc(c);
+            return c;
         }
-    }
-    int sync() override {
-        int r1 = sb1->pubsync();
-        int r2 = sb2->pubsync();
-        return (r1 == 0 && r2 == 0) ? 0 : -1;
-    }
-};
+    
+        virtual int sync() override {
+            int result1 = buffer1 ? buffer1->pubsync() : 0;
+            int result2 = buffer2 ? buffer2->pubsync() : 0;
+            return result1 == 0 && result2 == 0 ? 0 : -1;
+        }
+    
+    private:
+        std::streambuf* buffer1;
+        std::streambuf* buffer2;
+};    
 
 // ------------------------
 // Helper: Format 32-bit Hexadecimal String
 // ------------------------
-string to_hex(unsigned int value) {
+inline string to_hex(unsigned int value) {
     stringstream ss;
     ss << "0x" << setw(8) << setfill('0') << hex << uppercase << value;
     return ss.str();
@@ -773,8 +772,8 @@ void stepRiscvSim() {
     // Prepare to capture output of this cycle.
     streambuf* orig_buf = cout.rdbuf();          // save original streambuf
     ostringstream cycleStream;                     // stream to capture output
-    TeeBuf localTee(orig_buf, cycleStream.rdbuf()); // tee to console and cycleStream
-    cout.rdbuf(&localTee);
+    DualStreamBuf dualBuf(orig_buf, cycleStream.rdbuf());
+    cout.rdbuf(&dualBuf);
 
     // Execute one simulation cycle.
     fetch();
@@ -850,6 +849,8 @@ void resetRiscvSim() {
     memset(R, 0, sizeof(R));
     R[2] = 0x7FFFFFDC;
     R[3] = 0x10000000;
+    R[10] = 0x00000001;
+    R[11] = 0x7FFFFFDC;
 
     // Reset PC, clock cycles, and halt flag.
     PC = 0;
@@ -882,9 +883,6 @@ void runRiscvSim() {
     }
 }
 
-// ------------------------
-// Main Function
-// ------------------------
 int main() {
     // Load the program and start the interactive simulation.
     load_program_memory();

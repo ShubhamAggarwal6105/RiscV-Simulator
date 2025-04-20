@@ -131,6 +131,48 @@
       <set>AlignLeading|AlignVCenter</set>
      </property>
     </column>
+    <column>
+     <property name="text">
+      <string>New Column</string>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>12</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="textAlignment">
+      <set>AlignLeading|AlignVCenter</set>
+     </property>
+    </column>
+    <column>
+     <property name="text">
+      <string>New Column</string>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>12</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="textAlignment">
+      <set>AlignLeading|AlignVCenter</set>
+     </property>
+    </column>
+    <column>
+     <property name="text">
+      <string>New Column</string>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>12</pointsize>
+       <bold>true</bold>
+      </font>
+     </property>
+     <property name="textAlignment">
+      <set>AlignLeading|AlignVCenter</set>
+     </property>
+    </column>
    </widget>
    <widget class="QPushButton" name="btnSimulator">
     <property name="enabled">
@@ -418,9 +460,9 @@
     <property name="geometry">
      <rect>
       <x>730</x>
-      <y>556</y>
+      <y>566</y>
       <width>413</width>
-      <height>51</height>
+      <height>41</height>
      </rect>
     </property>
     <layout class="QGridLayout" name="layoutMemButtons_2">
