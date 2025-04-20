@@ -5,7 +5,7 @@ This project implements a **32-bit RISC-V assembler** and a **hardware simulator
 ---
 
 ## Table of Contents
-
+ 
 - [Project Overview](#project-overview)
 - [Features](#features)
 - [Input & Output File Formats](#input--output-file-formats)
