@@ -13,6 +13,7 @@ SOURCES += \
     highlighter.cpp \
     main.cpp \
     mainwindow.cpp \
+    mytablewidget.cpp \
     optiondialog.cpp \
     pipeline_simulator.cpp \
     simulator.cpp
@@ -24,6 +25,7 @@ HEADERS += \
     highlighter.h \
     knobs.h \
     mainwindow.h \
+    mytablewidget.h \
     optiondialog.h \
     pipeline_registers.h \
     pipeline_simulator.h \

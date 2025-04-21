@@ -22,6 +22,7 @@
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QTableWidget>
 #include <QtWidgets/QWidget>
+#include "mytablewidget.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -30,7 +31,7 @@ class Ui_MainWindow
 public:
     QWidget *centralwidget;
     QPushButton *btnEditor;
-    QTableWidget *tableMC;
+    MyTableWidget *tableMC;
     QPushButton *btnSimulator;
     QPlainTextEdit *txtEditor;
     QWidget *horizontalLayoutWidget;
@@ -74,7 +75,7 @@ public:
         btnEditor->setCheckable(false);
         btnEditor->setChecked(false);
         btnEditor->setFlat(true);
-        tableMC = new QTableWidget(centralwidget);
+        tableMC = new MyTableWidget(centralwidget);
         if (tableMC->columnCount() < 6)
             tableMC->setColumnCount(6);
         QFont font;
@@ -238,7 +239,7 @@ public:
         tableMemory->verticalHeader()->setVisible(false);
         gridLayoutWidget = new QWidget(centralwidget);
         gridLayoutWidget->setObjectName("gridLayoutWidget");
-        gridLayoutWidget->setGeometry(QRect(730, 566, 413, 41));
+        gridLayoutWidget->setGeometry(QRect(730, 556, 413, 51));
         layoutMemButtons_2 = new QGridLayout(gridLayoutWidget);
         layoutMemButtons_2->setObjectName("layoutMemButtons_2");
         layoutMemButtons_2->setContentsMargins(0, 0, 0, 0);

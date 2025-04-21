@@ -102,8 +102,8 @@ bool stopFetching = false;  // Prevents fetching new instructions after HALT
 
 // Stats
 int totalCycles = 0;
-int totalInstructions = 0;
-int stallCount = 0;
+int dataStalls = 0;
+int controlStalls = 0;
 int dataHazards = 0;
 int controlHazards = 0;
 int branchMispredictions = 0;
@@ -141,7 +141,7 @@ int checkRAWStalls(uint8_t rs, const KnobManager& knobs) {
 
 // Function declarations
 int instructionFetch(const KnobManager& knobs);
-int instructionDecode(const KnobManager& knobs);
+pair<int, vector<vector<int>>> instructionDecode(const KnobManager& knobs);
 int executeStage(const KnobManager& knobs);
 int memoryAccess(const KnobManager& knobs);
 int writeBack(const KnobManager& knobs);
@@ -168,8 +168,8 @@ void resetPipelinedSimulator(){
 
     // Reset statistics
     totalCycles = 0;
-    totalInstructions = 0;
-    stallCount = 0;
+    dataStalls = 0;
+    controlStalls = 0;
     dataHazards = 0;
     controlHazards = 0;
     branchMispredictions = 0;
@@ -211,8 +211,9 @@ void resetPipelinedSimulator(){
     cout << "Simulation reset." << endl;
 }
 
-vector<int> stepPipelinedSimulator(KnobManager& knobs){
+pair<vector<int>, vector<vector<int>>> stepPipelinedSimulator(KnobManager& knobs){
     vector<int> instructionStage = {-1, -1, -1, -1, -1};
+    vector<vector<int>> forwardingDetails;
     if (!(stopFetching && isPipelineEmpty())) {
         if (pipelineControl.flushIF) {
             PC = nextPC;
@@ -241,7 +242,11 @@ vector<int> stepPipelinedSimulator(KnobManager& knobs){
         }
         if (runMEM) instructionStage[3] = memoryAccess(knobs);
         if (runEX) instructionStage[2] = executeStage(knobs);
-        if (runID) instructionStage[1] = instructionDecode(knobs);
+        if (runID){
+            auto details = instructionDecode(knobs);
+            instructionStage[1] = details.first;
+            forwardingDetails = details.second;
+        }
         if (runIF) instructionStage[0] = instructionFetch(knobs);
 
         // Restore cout
@@ -282,6 +287,9 @@ vector<int> stepPipelinedSimulator(KnobManager& knobs){
 
     // Write stats to a separate file
     if (knobs.enableStats) {
+        int totalInstructions = data_transfer_instructions + ALU_instructions + control_instructions;
+        int totalStalls = dataStalls + controlStalls;
+
         std::ofstream stats("stats.txt", std::ios::out | std::ios::trunc);
         float cpi = totalInstructions ? totalCycles / (float)totalInstructions : 0.0f;
         stats << "Total Cycles: " << totalCycles << "\n";
@@ -293,19 +301,19 @@ vector<int> stepPipelinedSimulator(KnobManager& knobs){
         stats << "Data Hazards: " << dataHazards << "\n";
         stats << "Control Hazards: " << controlHazards << "\n";
         stats << "Branch Mispredictions: " << branchMispredictions << "\n";
-        stats << "Total Stalls: " << stallCount + 2*controlHazards << "\n";
-        stats << "Stalls due to data hazards: " << stallCount << "\n";
-        stats << "Stalls due to control hazards: " << 2*controlHazards << "\n";
+        stats << "Total Stalls: " << totalStalls << "\n";
+        stats << "Stalls due to data hazards: " << dataStalls << "\n";
+        stats << "Stalls due to control hazards: " << controlStalls << "\n";
         stats.close();
     }
 
-    return instructionStage;
+    return {instructionStage, forwardingDetails};
 }
 
 pair<vector<int>, map<uint32_t, vector<pair<bool, bool>>>> runPipelinedSimulator(KnobManager& knobs) {
     vector<int> instructionStage = {-1, -1, -1, -1, -1};
     while (!(stopFetching && isPipelineEmpty())) {
-        instructionStage = stepPipelinedSimulator(knobs);
+        instructionStage = stepPipelinedSimulator(knobs).first;
     }
 
     std::cout << "\n✅ Simulation complete. Output written to 'cycle_log.txt' and 'stats.txt'\n";
@@ -372,11 +380,11 @@ int instructionFetch(const KnobManager& knobs) {
     return if_id.pc;
 }
 
-int instructionDecode(const KnobManager& knobs) {
+pair<int, vector<vector<int>>> instructionDecode(const KnobManager& knobs) {
     if (!if_id.valid) {
         id_ex=ID_EX_Register{};
         id_ex.valid = false;
-        return -1;
+        return {-1, {}};
     }
 
     uint32_t instruction = if_id.instruction;
@@ -387,29 +395,12 @@ int instructionDecode(const KnobManager& knobs) {
     uint8_t rs2 = (instruction >> 20) & 0x1F;
     uint8_t funct7 = (instruction >> 25) & 0x7F;
 
-    // RAW hazard check
-    int stallRS1 = checkRAWStalls(rs1, knobs);
-    int stallRS2 = checkRAWStalls(rs2, knobs);
-
-    if (pipelineControl.stallIFCount > 0) return -1;
-
-    //check data hazards for rs1 and rs2
-    int maxStalls = std::max(stallRS1, stallRS2);
-    if (maxStalls > 0) {
-        pipelineControl.stallIFCount = maxStalls;
-        stallCount += maxStalls;
-        id_ex.valid = false;
-        return -1;
-    }
-
-    // Use Control Unit to get control signals
-    ControlSignals ctrl = getControlSignals(opcode, funct3, funct7);
-
     // Immediate
     uint32_t imm = 0;
     switch (opcode) {
     case 0x03: case 0x13: case 0x67:
         imm = static_cast<int32_t>(instruction) >> 20;
+        rs2 = 0;
         break;
     case 0x23:
         imm = ((instruction >> 25) << 5) | ((instruction >> 7) & 0x1F);
@@ -424,8 +415,12 @@ int instructionDecode(const KnobManager& knobs) {
         break;
     case 0x37: case 0x17:
         imm = instruction & 0xFFFFF000;
+        rs1 = 0;
+        rs2 = 0;
         break;
     case 0x6F:
+        rs1 = 0;
+        rs2 = 0;
         imm = (((instruction >> 31) & 0x1) << 20) |
               (((instruction >> 21) & 0x3FF) << 1) |
               (((instruction >> 20) & 0x1) << 11) |
@@ -433,6 +428,24 @@ int instructionDecode(const KnobManager& knobs) {
         imm = static_cast<int32_t>(imm << 11) >> 11;
         break;
     }
+
+    // RAW hazard check
+    int stallRS1 = checkRAWStalls(rs1, knobs);
+    int stallRS2 = checkRAWStalls(rs2, knobs);
+
+    if (pipelineControl.stallIFCount > 0) return {-1, {}};
+
+    //check data hazards for rs1 and rs2
+    int maxStalls = std::max(stallRS1, stallRS2);
+    if (maxStalls > 0) {
+        pipelineControl.stallIFCount = maxStalls;
+        dataStalls += maxStalls;
+        id_ex.valid = false;
+        return {-1, {}};
+    }
+
+    // Use Control Unit to get control signals
+    ControlSignals ctrl = getControlSignals(opcode, funct3, funct7);
 
     // Populate ID/EX pipeline register
     id_ex.pc = if_id.pc;
@@ -448,6 +461,8 @@ int instructionDecode(const KnobManager& knobs) {
     // Forwarded values
     uint32_t rs1Val = R[rs1], rs2Val = R[rs2];
 
+    vector<vector<int>> forwardingDetails;
+
     if (knobs.dataForwarding) {
         bool forwarded_rs1 = false, forwarded_rs2 = false;
 
@@ -455,18 +470,22 @@ int instructionDecode(const KnobManager& knobs) {
             if (ex_mem.rd == rs1) {
                 rs1Val = ex_mem.aluResult;
                 forwarded_rs1 = true;
+                forwardingDetails.push_back({ex_mem.pc/4, 3, id_ex.pc/4, 2});
             }
             if (ex_mem.rd == rs2) {
                 rs2Val = ex_mem.aluResult;
                 forwarded_rs2 = true;
+                forwardingDetails.push_back({ex_mem.pc/4, 3, id_ex.pc/4, 2});
             }
         }
         if (mem_wb.valid && mem_wb.RegWrite && mem_wb.rd != 0) {
             if (!forwarded_rs1 && mem_wb.rd == rs1) {
                 rs1Val = mem_wb.MemToReg ? mem_wb.memData : mem_wb.aluResult;
+                forwardingDetails.push_back({mem_wb.pc/4, 4, id_ex.pc/4, 2});
             }
             if (!forwarded_rs2 && mem_wb.rd == rs2) {
                 rs2Val = mem_wb.MemToReg ? mem_wb.memData : mem_wb.aluResult;
+                forwardingDetails.push_back({mem_wb.pc/4, 4, id_ex.pc/4, 2});
             }
         }
     }
@@ -514,7 +533,7 @@ int instructionDecode(const KnobManager& knobs) {
     id_ex.aluOp = ctrl.aluOp; // New: ALU control signal
     if_id = IF_ID_Register{}; // clears IF/ID
 
-    return id_ex.pc;
+    return {id_ex.pc, forwardingDetails};
 }
 
 int executeStage(const KnobManager& knobs) {
@@ -731,7 +750,6 @@ int writeBack(const KnobManager& knobs) {
         R[mem_wb.rd] = result;
     }
 
-    totalInstructions++;
     if (mem_wb.Halt) {
         stopFetching = true;
     }
@@ -812,10 +830,21 @@ void printPipelineRegisters(const KnobManager& knobs) {
 
 
 void flushPipeline() {
-    controlHazards++;
+    int is_hazard = 0;
+    int num_stalls = 0;
     stopFetching = false;
-    if_id.valid = false;
-    id_ex.valid = false;
+    if (if_id.valid){
+        if_id.valid = false;
+        is_hazard = 1;
+        num_stalls++;
+    }
+    if (id_ex.valid){
+        id_ex.valid = false;
+        is_hazard = 1;
+        num_stalls++;
+    }
+    controlHazards += is_hazard;
+    controlStalls += num_stalls;
 }
 
 bool isPipelineEmpty() {
@@ -852,6 +881,7 @@ void loadMemoryFromMCFile(const string& filename) {
 
     infile.close();
 }
+
 
 int main(){
     knob5File.open("knob5_log.txt", std::ios::out | std::ios::trunc);

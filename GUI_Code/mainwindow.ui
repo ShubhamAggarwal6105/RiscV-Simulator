@@ -54,7 +54,7 @@
      <bool>true</bool>
     </property>
    </widget>
-   <widget class="QTableWidget" name="tableMC">
+   <widget class="MyTableWidget" name="tableMC">
     <property name="enabled">
      <bool>true</bool>
     </property>
@@ -460,9 +460,9 @@
     <property name="geometry">
      <rect>
       <x>730</x>
-      <y>566</y>
+      <y>556</y>
       <width>413</width>
-      <height>41</height>
+      <height>51</height>
      </rect>
     </property>
     <layout class="QGridLayout" name="layoutMemButtons_2">
@@ -534,6 +534,13 @@
    <zorder>txtEditor</zorder>
   </widget>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>MyTableWidget</class>
+   <extends>QTableWidget</extends>
+   <header>mytablewidget.h</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

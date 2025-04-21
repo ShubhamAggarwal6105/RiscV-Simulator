@@ -17,6 +17,7 @@ int numRows;
 int cursorMemory = 0;
 
 vector<int> instructionStage = {-1, -1, -1, -1, -1};
+vector<vector<int>> forwardingDetails;
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -351,11 +352,17 @@ void MainWindow::on_btnSimulator_clicked()
         for(int i=0; i<numRows; i++){
             QTableWidgetItem *item = new QTableWidgetItem(rows[i]);
 
-            QTableWidgetItem *item1 = new QTableWidgetItem("✔");
-            QTableWidgetItem *item2 = new QTableWidgetItem("✔");
-            QTableWidgetItem *item3 = new QTableWidgetItem("✔");
-            QTableWidgetItem *item4 = new QTableWidgetItem("✔");
-            QTableWidgetItem *item5 = new QTableWidgetItem("✔");
+            QTableWidgetItem *item1 = new QTableWidgetItem();
+            QTableWidgetItem *item2 = new QTableWidgetItem();
+            QTableWidgetItem *item3 = new QTableWidgetItem();
+            QTableWidgetItem *item4 = new QTableWidgetItem();
+            QTableWidgetItem *item5 = new QTableWidgetItem();
+
+            item1->setForeground(QColor(255, 143, 64));
+            item2->setForeground(QColor(255, 143, 64));
+            item3->setForeground(QColor(255, 143, 64));
+            item4->setForeground(QColor(255, 143, 64));
+            item5->setForeground(QColor(255, 143, 64));
 
             item->setFlags(item->flags() & ~Qt::ItemIsEditable);
             item1->setFlags(item1->flags() & ~Qt::ItemIsEditable);
@@ -364,11 +371,11 @@ void MainWindow::on_btnSimulator_clicked()
             item4->setFlags(item4->flags() & ~Qt::ItemIsEditable);
             item5->setFlags(item5->flags() & ~Qt::ItemIsEditable);
 
-            item1->setForeground((i*4==instructionStage[0]?QColor(255, 143, 64):QColor(0, 0, 0)));
-            item2->setForeground((i*4==instructionStage[1]?QColor(255, 143, 64):QColor(0, 0, 0)));
-            item3->setForeground((i*4==instructionStage[2]?QColor(255, 143, 64):QColor(0, 0, 0)));
-            item4->setForeground((i*4==instructionStage[3]?QColor(255, 143, 64):QColor(0, 0, 0)));
-            item5->setForeground((i*4==instructionStage[4]?QColor(255, 143, 64):QColor(0, 0, 0)));
+            item1->setText((i*4==instructionStage[0]?"✔":""));
+            item2->setText((i*4==instructionStage[1]?"✔":""));
+            item3->setText((i*4==instructionStage[2]?"✔":""));
+            item4->setText((i*4==instructionStage[3]?"✔":""));
+            item5->setText((i*4==instructionStage[4]?"✔":""));
 
             ui->tableMC->setItem(i, 0, item);
             ui->tableMC->setItem(i, 1, item1);
@@ -395,6 +402,7 @@ void MainWindow::on_btnSimulator_clicked()
         pipeline::load_program_memory("output.mc");
         pipeline::resetPipelinedSimulator();
         instructionStage = {-1, -1, -1, -1, -1};
+        forwardingDetails = {};
 
         // Register/Memory Display
         ui->btnRegistor->show();
@@ -500,6 +508,7 @@ void MainWindow::updateCMDStates(){
 
 // Updates the current machine code line highlighter
 void MainWindow::updateMCDisplay(){
+    ui->tableMC->clearArrows();
     if (!pipelineEnabled){
         for(int i=0; i<numRows; i++){
             if (i * 4 == PC) {
@@ -516,11 +525,15 @@ void MainWindow::updateMCDisplay(){
     }
     else{
         for(int i=0; i<numRows; i++){
-            ui->tableMC->item(i,1)->setForeground((i*4==instructionStage[0]?QColor(255, 143, 64):QColor(0, 0, 0)));
-            ui->tableMC->item(i,2)->setForeground((i*4==instructionStage[1]?QColor(255, 143, 64):QColor(0, 0, 0)));
-            ui->tableMC->item(i,3)->setForeground((i*4==instructionStage[2]?QColor(255, 143, 64):QColor(0, 0, 0)));
-            ui->tableMC->item(i,4)->setForeground((i*4==instructionStage[3]?QColor(255, 143, 64):QColor(0, 0, 0)));
-            ui->tableMC->item(i,5)->setForeground((i*4==instructionStage[4]?QColor(255, 143, 64):QColor(0, 0, 0)));
+            ui->tableMC->item(i,1)->setText((i*4==instructionStage[0]?"✔":""));
+            ui->tableMC->item(i,2)->setText((i*4==instructionStage[1]?"✔":""));
+            ui->tableMC->item(i,3)->setText((i*4==instructionStage[2]?"✔":""));
+            ui->tableMC->item(i,4)->setText((i*4==instructionStage[3]?"✔":""));
+            ui->tableMC->item(i,5)->setText((i*4==instructionStage[4]?"✔":""));
+        }
+        // Clear existing arrows and add two distinct ones:
+        for(vector<int>& a: forwardingDetails){
+            ui->tableMC->addArrow(a[0], a[1], a[2], a[3]);
         }
     }
 }
@@ -662,7 +675,9 @@ void MainWindow::on_stepButton_clicked()
         stepRiscvSim();
     }
     else{
-        instructionStage = pipeline::stepPipelinedSimulator(knobs);
+        auto details = pipeline::stepPipelinedSimulator(knobs);
+        instructionStage = details.first;
+        forwardingDetails = details.second;
     }
     MainWindow::updateRegisterDisplay();
     MainWindow::updateMemoryDisplay();
@@ -688,6 +703,7 @@ void MainWindow::on_resetButton_clicked()
     }
     else{
         instructionStage = {-1, -1, -1, -1, -1};
+        forwardingDetails = {};
         pipeline::resetPipelinedSimulator();
     }
     MainWindow::updateRegisterDisplay();

@@ -26,7 +26,7 @@ void    print_registers();
 void    print_memory();
 
 void resetPipelinedSimulator();
-std::vector<int> stepPipelinedSimulator(KnobManager& knobs);
+std::pair<std::vector<int>, std::vector<std::vector<int>>> stepPipelinedSimulator(KnobManager& knobs);
 pair<std::vector<int>, map<std::uint32_t, std::vector<std::pair<bool, bool>>>> runPipelinedSimulator (KnobManager& knobs);
 
 } // namespace pipeline
