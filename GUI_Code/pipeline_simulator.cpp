@@ -288,10 +288,20 @@ pair<vector<int>, vector<vector<int>>> stepPipelinedSimulator(KnobManager& knobs
     return {instructionStage, forwardingDetails};
 }
 
-pair<vector<int>, map<uint32_t, vector<pair<bool, bool>>>> runPipelinedSimulator(KnobManager& knobs) {
+pair<vector<int>, map<uint32_t, vector<pair<bool, bool>>>> runPipelinedSimulator(KnobManager& knobs, const set<int>& traceCounters) {
     vector<int> instructionStage = {-1, -1, -1, -1, -1};
     while (!(stopFetching && isPipelineEmpty())) {
         instructionStage = stepPipelinedSimulator(knobs).first;
+        bool flag = true;
+        for(int pc: instructionStage){
+            if ((traceCounters.find(pc) != traceCounters.end())
+                || (traceCounters.find(pc-0x10000000) != traceCounters.end())
+                || (traceCounters.find(pc-0x20000000) != traceCounters.end())){
+                flag = false;
+                break;
+            }
+        }
+        if (!flag) break;
     }
 
     std::cout << "\n✅ Simulation complete. Output written to 'cycle_log.txt' and 'stats.txt'\n";
@@ -303,6 +313,7 @@ int instructionFetch(const KnobManager& knobs) {
     // 1. If we're stalling this cycle, return without fetching
     if (pipelineControl.stallIFCount > 0) {
         pipelineControl.stallIFCount--;
+        if (if_id.valid) return 0x10000000+if_id.pc;
         return -1;
     }
 
@@ -355,6 +366,7 @@ int instructionFetch(const KnobManager& knobs) {
         stopFetching = true;
     }
 
+    if (pipelineControl.flushIF) return 0x20000000+if_id.pc;
     return if_id.pc;
 }
 
@@ -511,6 +523,7 @@ pair<int, vector<vector<int>>> instructionDecode(const KnobManager& knobs) {
     id_ex.aluOp = ctrl.aluOp; // New: ALU control signal
     if_id = IF_ID_Register{}; // clears IF/ID
 
+    if (pipelineControl.flushIF) return {0x20000000+id_ex.pc, forwardingDetails};
     return {id_ex.pc, forwardingDetails};
 }
 

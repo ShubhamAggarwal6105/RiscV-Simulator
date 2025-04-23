@@ -15,8 +15,10 @@ KnobManager knobs;
 bool pipelineEnabled = false;
 int numRows;
 int cursorMemory = 0;
+QList<QStringList> rows;
 
 vector<int> instructionStage = {-1, -1, -1, -1, -1};
+set<int> traceCounters;
 vector<vector<int>> forwardingDetails;
 
 MainWindow::MainWindow(QWidget *parent)
@@ -170,9 +172,6 @@ void MainWindow::on_btnSimulator_clicked()
     knobs.dataForwarding = knobList[1];
     knobs.traceBranchUnit = knobList[2];
 
-    // If pipeline NOT enabled, use PHASE 2
-    pipelineEnabled = knobList[0];
-    if (!pipelineEnabled){
     // Read the generated output.mc file to display the machine code
     QFile outFile("output.mc");
     if (!outFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -185,7 +184,7 @@ void MainWindow::on_btnSimulator_clicked()
 
     // // Update the tableMC to show the machine code
     QStringList lines = machineCode.split('\n');
-    QList<QStringList> rows;
+    rows.clear();
     for(int i=0; i<lines.size(); i++){
         QString line = lines[i];
         int commaIndex = line.indexOf(',');
@@ -208,6 +207,11 @@ void MainWindow::on_btnSimulator_clicked()
         row << item1 << item2 << item3;
         rows.append(row);
     }
+    traceCounters.clear();
+
+    // If pipeline NOT enabled, use PHASE 2
+    pipelineEnabled = knobList[0];
+    if (!pipelineEnabled){
 
     ui->tableMC->setColumnCount(3);
 
@@ -296,31 +300,6 @@ void MainWindow::on_btnSimulator_clicked()
 
     // PIPELINE, PHASE 3
     else{
-        // Read the generated output.mc file to display the machine code
-        QFile outFile("output.mc");
-        if (!outFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            QMessageBox::warning(this, "File Error", "Could not open output.mc");
-            return;
-        }
-        QTextStream outStream(&outFile);
-        QString machineCode = outStream.readAll();
-        outFile.close();
-
-        // // Update the tableMC to show the machine code
-        QStringList lines = machineCode.split('\n');
-        QStringList rows;
-        for(int i=0; i<lines.size(); i++){
-            QString line = lines[i];
-            int commaIndex = line.indexOf(',');
-            QString rightPart = line.mid(commaIndex+1).trimmed();
-            if (rightPart == QString("EOF")){
-                break;
-            }
-            QStringList rightTokens = rightPart.split('#');
-            QString item3 = rightTokens[0].trimmed();
-            rows.append(item3);
-        }
-
         ui->tableMC->setColumnCount(6);
 
         QStringList headers;
@@ -350,7 +329,7 @@ void MainWindow::on_btnSimulator_clicked()
         numRows = rows.size();
         ui->tableMC->setRowCount(numRows);
         for(int i=0; i<numRows; i++){
-            QTableWidgetItem *item = new QTableWidgetItem(rows[i]);
+            QTableWidgetItem *item = new QTableWidgetItem(rows[i][2]);
 
             QTableWidgetItem *item1 = new QTableWidgetItem();
             QTableWidgetItem *item2 = new QTableWidgetItem();
@@ -371,11 +350,11 @@ void MainWindow::on_btnSimulator_clicked()
             item4->setFlags(item4->flags() & ~Qt::ItemIsEditable);
             item5->setFlags(item5->flags() & ~Qt::ItemIsEditable);
 
-            item1->setText((i*4==instructionStage[0]?"✔":""));
-            item2->setText((i*4==instructionStage[1]?"✔":""));
-            item3->setText((i*4==instructionStage[2]?"✔":""));
-            item4->setText((i*4==instructionStage[3]?"✔":""));
-            item5->setText((i*4==instructionStage[4]?"✔":""));
+            item1->setText((i*4==instructionStage[0]?"✔":(i*4==instructionStage[0]-0x10000000?"🛑":(i*4==instructionStage[0]-0x20000000?"🌊":""))));
+            item2->setText((i*4==instructionStage[1]?"✔":(i*4==instructionStage[1]-0x10000000?"🛑":(i*4==instructionStage[1]-0x20000000?"🌊":""))));
+            item3->setText((i*4==instructionStage[2]?"✔":(i*4==instructionStage[2]-0x10000000?"🛑":(i*4==instructionStage[2]-0x20000000?"🌊":""))));
+            item4->setText((i*4==instructionStage[3]?"✔":(i*4==instructionStage[3]-0x10000000?"🛑":(i*4==instructionStage[3]-0x20000000?"🌊":""))));
+            item5->setText((i*4==instructionStage[4]?"✔":(i*4==instructionStage[4]-0x10000000?"🛑":(i*4==instructionStage[4]-0x20000000?"🌊":""))));
 
             ui->tableMC->setItem(i, 0, item);
             ui->tableMC->setItem(i, 1, item1);
@@ -499,8 +478,14 @@ void MainWindow::updateCMDStates(){
         }
     }
     else{
-        ui->runButton->setEnabled(true);
-        ui->stepButton->setEnabled(true);
+        if (pipeline::stopFetching && pipeline::isPipelineEmpty()){
+            ui->runButton->setEnabled(false);
+            ui->stepButton->setEnabled(false);
+        }
+        else{
+            ui->runButton->setEnabled(true);
+            ui->stepButton->setEnabled(true);
+        }
         ui->prevButton->setEnabled(false);
         ui->resetButton->setEnabled(true);
     }
@@ -525,11 +510,11 @@ void MainWindow::updateMCDisplay(){
     }
     else{
         for(int i=0; i<numRows; i++){
-            ui->tableMC->item(i,1)->setText((i*4==instructionStage[0]?"✔":""));
-            ui->tableMC->item(i,2)->setText((i*4==instructionStage[1]?"✔":""));
-            ui->tableMC->item(i,3)->setText((i*4==instructionStage[2]?"✔":""));
-            ui->tableMC->item(i,4)->setText((i*4==instructionStage[3]?"✔":""));
-            ui->tableMC->item(i,5)->setText((i*4==instructionStage[4]?"✔":""));
+            ui->tableMC->item(i,1)->setText((i*4==instructionStage[0]?"✔":(i*4==instructionStage[0]-0x10000000?"🛑":(i*4==instructionStage[0]-0x20000000?"🌊":""))));
+            ui->tableMC->item(i,2)->setText((i*4==instructionStage[1]?"✔":(i*4==instructionStage[1]-0x10000000?"🛑":(i*4==instructionStage[1]-0x20000000?"🌊":""))));
+            ui->tableMC->item(i,3)->setText((i*4==instructionStage[2]?"✔":(i*4==instructionStage[2]-0x10000000?"🛑":(i*4==instructionStage[2]-0x20000000?"🌊":""))));
+            ui->tableMC->item(i,4)->setText((i*4==instructionStage[3]?"✔":(i*4==instructionStage[3]-0x10000000?"🛑":(i*4==instructionStage[3]-0x20000000?"🌊":""))));
+            ui->tableMC->item(i,5)->setText((i*4==instructionStage[4]?"✔":(i*4==instructionStage[4]-0x10000000?"🛑":(i*4==instructionStage[4]-0x20000000?"🌊":""))));
         }
         // Clear existing arrows and add two distinct ones:
         for(vector<int>& a: forwardingDetails){
@@ -590,12 +575,17 @@ void MainWindow::updateMemoryDisplay()
 void MainWindow::on_runButton_clicked()
 {
     if (!pipelineEnabled){
-        runRiscvSim();
+        while (PC != (numRows-1)*4){
+            stepRiscvSim();
+            if (traceCounters.find(PC) != traceCounters.end()) break;
+        }
     }
     else{
-        auto details = pipeline::runPipelinedSimulator(knobs);
-
+        auto details = pipeline::runPipelinedSimulator(knobs, traceCounters);
         instructionStage = details.first;
+
+        if (pipeline::stopFetching && pipeline::isPipelineEmpty()){
+
         map<uint32_t, vector<pair<bool, bool>>> PHT_table = details.second;
 
         int total = 0, correct = 0;
@@ -661,6 +651,7 @@ void MainWindow::on_runButton_clicked()
         window.setLayout(layout);
         window.resize(400, 300);
         window.exec();
+        }
     }
     MainWindow::updateRegisterDisplay();
     MainWindow::updateMemoryDisplay();
@@ -678,6 +669,10 @@ void MainWindow::on_stepButton_clicked()
         auto details = pipeline::stepPipelinedSimulator(knobs);
         instructionStage = details.first;
         forwardingDetails = details.second;
+        if (pipeline::stopFetching && pipeline::isPipelineEmpty()){
+            MainWindow::on_runButton_clicked();
+            return;
+        }
     }
     MainWindow::updateRegisterDisplay();
     MainWindow::updateMemoryDisplay();
@@ -698,6 +693,10 @@ void MainWindow::on_prevButton_clicked()
 
 void MainWindow::on_resetButton_clicked()
 {
+    traceCounters.clear();
+    for(int i=0; i<numRows; i++){
+        ui->tableMC->item(i, 0)->setText(rows[i][2]);
+    }
     if (!pipelineEnabled){
         resetRiscvSim();
     }
@@ -819,3 +818,16 @@ void MainWindow::on_btnMemDown_clicked()
     updateMemoryDisplay();
 }
 
+
+void MainWindow::on_tableMC_cellClicked(int row, int column)
+{
+    column = 0;
+    if (ui->tableMC->item(row, column)->text().startsWith("🔴")){
+        traceCounters.erase(traceCounters.find(4*row));
+        ui->tableMC->item(row, column)->setText(rows[row][2]);
+    }
+    else{
+        traceCounters.insert(4*row);
+        ui->tableMC->item(row, column)->setText("🔴 "+rows[row][2]);
+    }
+}

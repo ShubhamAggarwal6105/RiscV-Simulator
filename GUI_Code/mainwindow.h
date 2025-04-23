@@ -46,6 +46,8 @@ private slots:
 
     void on_btnMemDown_clicked();
 
+    void on_tableMC_cellClicked(int row, int column);
+
 private:
     Ui::MainWindow *ui;
     void updateConsoleDisplay();

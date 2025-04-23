@@ -2,23 +2,23 @@
 using namespace std;
 
 // Convert string to integer
-int to_integer(const string& input) {
-    int num = 0;
+uint32_t to_integer(const string& input) {
+    uint32_t num = 0;
     if (input.length() == 3 && input[0] == '\'' && input[2] == '\'') {
         // Character (ASCII)
-        return input[1];
+        return static_cast<uint32_t>(input[1]);
     }
     else if (input.find("0x") == 0 || input.find("0X") == 0) {
-        // Hexadecimal (Base 16)
-        stringstream ss;
-        ss << hex << input.substr(2);
-        ss >> num;
-    } else if (input.find("0b") == 0 || input.find("0B") == 0) {
-        // Binary (Base 2)
-        num = stoi(input.substr(2), nullptr, 2);
-    } else {
-        // Decimal (Base 10)
-        num = stoi(input);
+        // Hexadecimal
+        num = static_cast<uint32_t>(stoul(input.substr(2), nullptr, 16));
+    }
+    else if (input.find("0b") == 0 || input.find("0B") == 0) {
+        // Binary
+        num = static_cast<uint32_t>(stoul(input.substr(2), nullptr, 2));
+    }
+    else {
+        // Decimal
+        num = static_cast<uint32_t>(stoul(input));
     }
     return num;
 }

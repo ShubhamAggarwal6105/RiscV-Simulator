@@ -16,6 +16,7 @@ namespace pipeline {
 extern unsigned int R[32];
 extern std::unordered_map<unsigned int, unsigned char> MEM;
 extern unsigned int PC;
+extern bool stopFetching;
 
 // top‑level API
 void    load_program_memory(const std::string& filename);
@@ -25,9 +26,10 @@ void    write_memory_to_file(const std::string& filename);
 void    print_registers();
 void    print_memory();
 
+bool isPipelineEmpty();
 void resetPipelinedSimulator();
 std::pair<std::vector<int>, std::vector<std::vector<int>>> stepPipelinedSimulator(KnobManager& knobs);
-pair<std::vector<int>, map<std::uint32_t, std::vector<std::pair<bool, bool>>>> runPipelinedSimulator (KnobManager& knobs);
+pair<std::vector<int>, map<std::uint32_t, std::vector<std::pair<bool, bool>>>> runPipelinedSimulator (KnobManager& knobs,const set<int>& traceCounters = {});
 
 } // namespace pipeline
 
