@@ -115,7 +115,7 @@ int checkRAWStalls(uint8_t rs, const KnobManager& knobs) {
     }
 
 
-    if (stalls > 0) dataHazards++;
+    if (stalls > 0 && pipelineControl.stallIFCount == 0) dataHazards++;
     return stalls;
 }
 
@@ -430,6 +430,7 @@ pair<int, vector<vector<int>>> instructionDecode(const KnobManager& knobs) {
     if (maxStalls > 0) {
         pipelineControl.stallIFCount = maxStalls;
         dataStalls += maxStalls;
+
         id_ex.valid = false;
         return {-1, {}};
     }

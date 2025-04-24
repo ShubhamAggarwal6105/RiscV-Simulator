@@ -1,9 +1,0 @@
-=========== Cycle 11 ===========
-
---- Pipeline Snapshot ---
--------- Pipeline Register Snapshot --------
-[IF/ID] PC: 0x00000018, Instruction: 0x00112023
-[ID/EX] Invalid
-[EX/MEM] PC: 0x00000014, ALUResult: 0x7fffffd8, rs2Val: 0x00000000, rd: x2, MemRead: 0, MemWrite: 0, MemToReg: 0, RegWrite: 1, Branch: 0, Jump: 0, Halt: 0
-[MEM/WB] Invalid
--------------------------------------------
